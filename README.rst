@@ -31,9 +31,9 @@ Installation
 
     apt install python3-imaplib2
 
-* Install the script `check_mail_loop.py` on your monitoring station under `/usr/local/bin/check_mail_loop.py`.
+* Install the script ``check_mail_loop.py`` on your monitoring station under ``/usr/local/bin/check_mail_loop.py``.
 
-* Now, define the check command. Depending on your setup, edit for example `/etc/icinga2/conf.d/commands_check_mail_loop.conf`:
+* Now, define the check command. Depending on your setup, edit for example ``/etc/icinga2/conf.d/commands_check_mail_loop.conf``:
 
 ::
 
@@ -56,9 +56,9 @@ Installation
               "--imap-cleanup" ]
     }
 
-* Set up dedicated E-mail accounts. The flag `--imap-cleanup` instructs the plugin to remove all E-mails from the IMAP account.
+* Set up dedicated E-mail accounts. The flag ``--imap-cleanup`` instructs the plugin to remove all E-mails from the IMAP account.
 
-* Add a configuration file for Icinga, for example `/etc/icinga2/conf.d/services_mail_loop.conf`:
+* Add a configuration file for Icinga, for example ``/etc/icinga2/conf.d/services_mail_loop.conf``:
 
 ::
 
