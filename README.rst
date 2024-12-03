@@ -43,17 +43,26 @@ Installation
       env.SMTP_PASS = "$mail_loop_smtp_pass$"
       env.IMAP_PASS = "$mail_loop_imap_pass$"
 
-      command = [ "/usr/local/bin/check_mail_loop.py",
-              "--mail-from", "$mail_loop_mail_from$",
-              "--mail-to", "$mail_loop_mail_to$",
-              "--smtp-host", "$mail_loop_smtp_host$",
-              "--smtp-port", "$mail_loop_smtp_port$",
-              "--smtp-user", "$mail_loop_smtp_user$",
-              "--imap-host", "$mail_loop_imap_host$",
-              "--imap-port", "$mail_loop_imap_port$",
-              "--imap-user", "$mail_loop_imap_user$",
-              "--imap-spam", "$mail_loop_imap_spam$",
-              "--imap-cleanup" ]
+      command = [ "/usr/local/bin/check_mail_loop.py" ]
+      arguments += {
+              "--mail-from" = "$mail_loop_mail_from$"
+              "--mail-to" = "$mail_loop_mail_to$"
+              "--smtp-host" = "$mail_loop_smtp_host$"
+              "--smtp-port" = "$mail_loop_smtp_port$"
+              "--smtp-user" = "$mail_loop_smtp_user$"
+              "--imap-host" = "$mail_loop_imap_host$"
+              "--imap-port" = "$mail_loop_imap_port$"
+              "--imap-user" = "$mail_loop_imap_user$"
+              "--imap-spam" = "$mail_loop_imap_spam$"
+              "--delay" = "$mail_loop_delay$"
+              "--retries" = "$mail_loop_retries$"
+              "--imap-cleanup" = {
+                 set_if = "$mail_loop_imap_cleanup$"
+                 }
+              "--imap-body" = {
+                 set_if = "$mail_loop_imap_body$"
+                 }
+      }
     }
 
 * Set up dedicated E-mail accounts. The flag ``--imap-cleanup`` instructs the plugin to remove all E-mails from the IMAP account.
@@ -83,6 +92,9 @@ Installation
       vars.mail_loop_imap_user = "mytestaccount@gmail.com"
       vars.mail_loop_imap_pass = "secret"
       vars.mail_loop_imap_spam = "[Gmail]/Spam"
+      vars.mail_loop_delay = 10
+      vars.mail_loop_retries = 3
+      vars.mail_loop_imap_body = false
 
       # Be polite and do not send too frequently.
       check_interval = 24h
