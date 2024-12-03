@@ -64,6 +64,9 @@ debug_flag = False
 # time to wait
 delay = 10
 
+# number of times to search for token
+retries = 3
+
 
 def debug(message: str) -> None:
 	if debug_flag:
@@ -103,13 +106,18 @@ def smtp_connect(smtp_host: str, smtp_port: int, smtp_user: str, smtp_pass: str)
 	Connect to an SMTPS server.
 
 	@param smtp_host: The mail server host.
-	@param smtp_port: The SMTP server port. STARTSSL or plaintext communication is not supported.
+	@param smtp_port: The SMTP server port. Plaintext communication is not supported.
 	@param smtp_user: The username for SMTP authentication.
 	@param smtp_pass: The password for SMTP authentication.
 	@return Function returns a smtplib.SMTP object that represents a server connection.
 	"""
 
-	server = smtplib.SMTP_SSL(smtp_host, smtp_port, context=ssl.create_default_context())
+	if smtp_port == 587:
+		server = smtplib.SMTP(smtp_host, smtp_port)
+		server.starttls()
+	else:
+		server = smtplib.SMTP_SSL(smtp_host, smtp_port, context=ssl.create_default_context())
+
 	debug(f"SMTP: Try to log in to {smtp_host} as: {smtp_user}")
 	server.login(smtp_user, smtp_pass)
 	debug(f"SMTP: Log in was successful.")
@@ -118,7 +126,7 @@ def smtp_connect(smtp_host: str, smtp_port: int, smtp_user: str, smtp_pass: str)
 
 
 def imap_retrieve_mail(imap_host: str, imap_port: int, imap_user: str, imap_pass: str, imap_spambox: Optional[str],
-					   expected_token: str, cleanup_flag: bool) -> MailFound:
+					   expected_token: str, cleanup_flag: bool, search_body: bool) -> MailFound:
 	"""
 	Retrieve an e-mail from an IMAP account. Search the INBOX and the Spambox for a specific token value.
 	Retry up to three times.
@@ -130,6 +138,7 @@ def imap_retrieve_mail(imap_host: str, imap_port: int, imap_user: str, imap_pass
 	@param imap_spambox: The name of the spam mailbox, where the mail is also searched. Pass None to skip.
 	@param expected_token: Lookup this token in a X-Icinga-Test-Id E-mail header.
 	@param cleanup_flag: Remove mails from the IMAP account.
+	@param search_body: Search token in email body instead of header.
 
 	@return Function returns a MailFound status.
 	"""
@@ -148,10 +157,10 @@ def imap_retrieve_mail(imap_host: str, imap_port: int, imap_user: str, imap_pass
 		debug(f"IMAP: Will also check spambox \"{imap_spambox}\" as fallback.")
 		mailboxes.append(imap_spambox)
 
-	for i in range(0, 3):
+	for i in range(0, retries):
 		for mailbox in mailboxes:
 			time.sleep(delay)
-			status = imap_search_server(server, mailbox, expected_token, cleanup_flag)
+			status = imap_search_server(server, mailbox, expected_token, cleanup_flag, search_body)
 			if status != MailFound.NOT_FOUND:
 				server.logout()
 				return status
@@ -160,7 +169,7 @@ def imap_retrieve_mail(imap_host: str, imap_port: int, imap_user: str, imap_pass
 	return status
 
 
-def imap_search_server(server: imaplib.IMAP4, mailbox: str, expected_token: str, cleanup_flag: bool) -> MailFound:
+def imap_search_server(server: imaplib.IMAP4, mailbox: str, expected_token: str, cleanup_flag: bool, search_body: bool) -> MailFound:
 	"""
 	Lookup token on IMAP server.
 
@@ -168,6 +177,7 @@ def imap_search_server(server: imaplib.IMAP4, mailbox: str, expected_token: str,
 	@param mailbox: Name of the mailbox, such as INBOX or Junk.
 	@param expected_token: Lookup this token in a X-Icinga-Test-Id E-mail header.
 	@param cleanup_flag: Remove mails from the IMAP account.
+	@param search_body: Search token in email body instead of header.
 	@return Function returns a MailFound status.
 	"""
 
@@ -175,6 +185,7 @@ def imap_search_server(server: imaplib.IMAP4, mailbox: str, expected_token: str,
 		def __init__(self, _data):
 			self.data = _data.decode()
 			self.header = "\r\n\r\n".join(self.data.split("\r\n\r\n")[0:1])
+			self.body = "\r\n\r\n".join(self.data.split("\r\n\r\n")[2:])
 
 	token_found = MailFound.NOT_FOUND
 	token = ""
@@ -190,11 +201,18 @@ def imap_search_server(server: imaplib.IMAP4, mailbox: str, expected_token: str,
 		typ, data = server.fetch(num, '(RFC822)')
 		debug(f"IMAP: [{mailbox}]:{num_str} Check mail {num_str}.")
 		email = Email(data[0][1])
-		for line in email.header.splitlines():
+		if not search_body:
+			for line in email.header.splitlines():
 
-			if line.startswith("X-Icinga-Test-Id"):
-				token = line.split("X-Icinga-Test-Id: ")[1].strip()
-				debug(f"IMAP: [{mailbox}]:{num_str} A token was found: {token}")
+				if line.startswith("X-Icinga-Test-Id"):
+					token = line.split("X-Icinga-Test-Id: ")[1].strip()
+					debug(f"IMAP: [{mailbox}]:{num_str} A token was found: {token}")
+		else:
+			for line in email.body.splitlines():
+
+				if line.startswith("X-Icinga-Test-Id"):
+					token = line.split("X-Icinga-Test-Id: ")[1].strip()
+					debug(f"IMAP: [{mailbox}]:{num_str} A token was found: {token}")
 
 		if token == expected_token:
 			debug(f"IMAP: [{mailbox}]:{num_str} Expected token {token} found in {mailbox}.")
@@ -218,7 +236,7 @@ def imap_search_server(server: imaplib.IMAP4, mailbox: str, expected_token: str,
 
 
 def main():
-	global debug_flag, delay
+	global debug_flag, delay, retries
 
 	parser = argparse.ArgumentParser(description='Check SMTP to IMAPS health status.')
 
@@ -244,14 +262,18 @@ def main():
 						help='IMAP: Passwort for login. Alternatively, set environment variable IMAP_PASS.',
 						default=os.getenv("IMAP_PASS"))
 	parser.add_argument('--imap-spam', metavar='IMAP_SPAM', help='IMAP: Name of the spam box.')
+	parser.add_argument('--imap-body', action='store_true', help='IMAP: Search token in body instead of header.')
 	parser.add_argument('--imap-cleanup', action='store_true', help="Delete processed mails on the IMAP account.")
 
 	parser.add_argument('--delay', metavar='SECONDS', help=f"Delay between sending and retrieving (default {delay} s).",
 						type=int, default=delay)
+	parser.add_argument('--retries', metavar='RETRIES', help=f"Token search attempts (default {retries}).",
+						type=int, default=retries)
 	args = parser.parse_args()
 
 	debug_flag = args.debug
 	delay = args.delay
+	retries = args.retries
 	
 	_uuid = str(uuid.uuid4())
 	email = email_create_message(args.mail_from, args.mail_to, _uuid)
@@ -260,7 +282,7 @@ def main():
 	debug(f"SMTP: Mail sent with ID {_uuid}.")
 
 	status = imap_retrieve_mail(args.imap_host, args.imap_port, args.imap_user, args.imap_pass, args.imap_spam, _uuid,
-								args.imap_cleanup)
+								args.imap_cleanup, args.imap_body)
 
 	if status == MailFound.FOUND:
 		print("OK")
