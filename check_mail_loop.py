@@ -218,15 +218,17 @@ def imap_search_server(server: imaplib.IMAP4, mailbox: str, expected_token: str,
 			debug(f"IMAP: [{mailbox}]:{num_str} Expected token {token} found in {mailbox}.")
 			if mailbox == "INBOX":
 				token_found = MailFound.FOUND
+				if cleanup_flag:
+					debug(f"IMAP: [{mailbox}]:{num_str} Mark mail {num_str} as deleted.")
+					server.store(num, '+FLAGS', '\\Deleted')
 			else:
 				token_found = MailFound.FOUND_IN_SPAM
+				if cleanup_flag:
+					debug(f"IMAP: [{mailbox}]:{num_str} Mark mail {num_str} as deleted.")
+					server.store(num, '+FLAGS', '\\Deleted')
 			break
 		else:
 			debug(f"IMAP: [{mailbox}]:{num_str} Expected token was not found in this e-mail.")
-
-		if cleanup_flag:
-			debug(f"IMAP: [{mailbox}]:{num_str} Mark mail {num_str} as deleted.")
-			server.store(num, '+FLAGS', '\\Deleted')
 
 	if cleanup_flag:
 		server.expunge()
